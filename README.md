@@ -10,8 +10,8 @@ The analysis is implemented using **R** and includes data cleaning, transformati
 
 ## 📂 Project Structure
 
-* `Data-Analysis-using-R.Rmd` → Main R Markdown file (properly formatted for knitting into PDF)
-* `Data-Analysis-using-R.R` → Plain R script (runs step-by-step in console, no knitting formatting)
+* `Data Analysis using R_knitting code.Rmd` → Main R Markdown file (properly formatted for knitting into PDF)
+* `Data-Analysis-using-R.Rmd` → Plain R script (runs step-by-step in console, no knitting formatting)
 * `AXISBANK_15m.csv` → Dataset used for analysis
 * `Data-Analysis-using-R.pdf` → Final knitted output
 
