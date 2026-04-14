@@ -1,0 +1,163 @@
+---
+title: "Assignment 2 - Data Analysis using R Programming"
+subtitle: "Historical Stock Analysis of Axis Bank for Revenue Optimization"
+author: "Group 5"
+date: "2026-04-15"
+output: pdf_document
+---
+
+# Introduction
+
+This analysis uses 15-minute historical stock data (2025 only) for Axis Bank. Insights on price movements and high-volume trading help the bank optimize trading strategies and generate revenue through better information systems. 1. Load the Dataset
+
+# 1. Load the Dataset
+
+# Click on the NEW file AXISBANK_15m_comma.csv when the pop-up appears
+data <- read.csv(file.choose(), header = TRUE)
+
+# Convert number columns
+data$open   <- as.numeric(data$open)
+data$high   <- as.numeric(data$high)
+data$low    <- as.numeric(data$low)
+data$close  <- as.numeric(data$close)
+data$volume <- as.numeric(data$volume)
+
+# Create Date column
+data$Date <- as.Date(substr(data$timestamp, 1, 10))
+
+print("SUCCESS! Column names:")
+print(names(data))
+print("Number of rows:")
+print(nrow(data))
+
+# 2. Print the Structure of the Dataset
+
+str(data)
+
+# 3. List the Variables in the Dataset
+
+names(data)
+
+# 4. Print the Top 15 Rows of the Dataset
+
+head(data, 15)
+
+# 5. User-Defined Function
+
+calc_15m_return <- function(open_price, close_price) {
+  return(((close_price - open_price) / open_price) * 100)
+}
+calc_15m_return(data$open[1], data$close[1])
+
+# 6. Filter Rows (2025 high-volume data)
+
+filtered_data <- data[format(data$Date, "%Y") == "2025" & 
+                      data$volume > mean(data$volume, na.rm = TRUE), ]
+head(filtered_data, 5)
+
+# 7. Dependent & Independent Variables + New Data Frame
+
+# Dependent: close price (what we want to predict for revenue)
+# Independent: volume and open price (predictors)
+
+dep_df <- filtered_data[, c("Date", "close")]
+ind_df <- filtered_data[, c("Date", "volume", "open")]
+
+# Simple reshaping (wide to long) - we add a unique ID to avoid the error
+filtered_data$id <- 1:nrow(filtered_data)          # temporary unique ID
+temp_wide <- filtered_data[, c("id", "Date", "close", "volume")]
+
+long_df <- reshape(temp_wide, 
+                   direction = "long",
+                   varying = list(c("close", "volume")),
+                   v.names = "Value",
+                   timevar = "Metric",
+                   times = c("close", "volume"),
+                   idvar = "id")
+
+# Create new data frame by joining dependent + independent variables (this is the main requirement)
+new_df <- merge(dep_df, ind_df, by = "Date")
+head(new_df, 5)
+
+# 8. Remove Missing Values
+
+new_df <- na.omit(new_df)
+
+# 9. Remove Duplicated Data
+
+new_df <- new_df[!duplicated(new_df), ] 
+nrow(new_df)
+
+# 10. Reorder Rows in Descending Order
+
+ordered_df <- new_df[order(-new_df$close), ]
+head(ordered_df, 5)
+
+# 11. Rename Columns
+
+colnames(new_df)[colnames(new_df) == "close"] <- "Closing_Price"
+colnames(new_df)[colnames(new_df) == "volume"] <- "Trading_Volume"
+head(new_df, 3)
+
+# 12. Add New Variables
+
+new_df$Trading_Volume_Doubled <- new_df$Trading_Volume * 2
+new_df$Total_Trade_Value <- new_df$Trading_Volume * new_df$Closing_Price
+head(new_df, 3)
+
+# 13. Create Training Set
+
+set.seed(123)
+train_index <- sample(1:nrow(new_df), 0.7 * nrow(new_df))
+train_set <- new_df[train_index, ]
+nrow(train_set)
+
+# 14. Summary Statistics
+
+summary(new_df)
+
+## 15. Mean, Median, Mode, Range
+
+mean_price   <- mean(new_df$Closing_Price, na.rm = TRUE)
+median_price <- median(new_df$Closing_Price, na.rm = TRUE)
+
+get_mode <- function(v) {
+  uniqv <- unique(v)
+  uniqv[which.max(tabulate(match(v, uniqv)))]
+}
+mode_price <- get_mode(new_df$Closing_Price)
+
+range_price <- range(new_df$Closing_Price, na.rm = TRUE)
+
+# Create a clean table (this works perfectly in PDF)
+stats_table <- data.frame(
+  Statistic = c("Mean", "Median", "Mode", "Range (Min to Max)"),
+  Value     = c(round(mean_price, 2),
+                round(median_price, 2),
+                round(mode_price, 2),
+                paste(round(range_price[1], 2), "to", round(range_price[2], 2)))
+)
+
+knitr::kable(stats_table, caption = "Summary Statistics of Closing Price")
+
+# 16. Scatter Plot
+
+plot(new_df$Trading_Volume, new_df$Closing_Price,
+     main = "Scatter Plot: Trading Volume vs Closing Price",
+     xlab = "Trading Volume", ylab = "Closing Price", pch = 19, col = "blue")
+
+# 17. Bar Plot (Average Closing Price by Weekday)
+
+filtered_data$Weekday <- weekdays(filtered_data$Date)
+avg_close <- tapply(filtered_data$close, filtered_data$Weekday, mean, na.rm = TRUE)
+barplot(avg_close, main = "Bar Plot: Avg Closing Price by Weekday",
+        xlab = "Weekday", ylab = "Average Closing Price", col = "steelblue")
+
+# 18. Pearson Correlation
+
+correlation <- cor(new_df$Trading_Volume, new_df$Closing_Price, method = "pearson")
+correlation
+
+# Conclusion
+
+The analysis identifies revenue opportunities for Axis Bank through high-volume trading patterns.
