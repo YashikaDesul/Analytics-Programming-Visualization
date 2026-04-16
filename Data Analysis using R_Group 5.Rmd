@@ -1,0 +1,257 @@
+---
+title: "Assignment 2 - Data Analysis using R Programming"
+subtitle: "Historical Stock Analysis of Axis Bank for Revenue Optimization"
+author: "Group 5"
+date: "2026-04-15"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(ggplot2)
+```
+
+# Introduction
+
+This analysis examines 15-minute interval stock data for Axis Bank in 2025 to identify patterns in price movement and trading activity. The goal is to evaluate whether trading volume and price behavior can provide actionable insights for financial decision-making.
+
+# 1. Load the Dataset
+
+```{r}
+data <- read.csv("AXISBANK_15m.csv", header = TRUE)
+
+# Convert numeric columns
+data$open   <- as.numeric(data$open)
+data$high   <- as.numeric(data$high)
+data$low    <- as.numeric(data$low)
+data$close  <- as.numeric(data$close)
+data$volume <- as.numeric(data$volume)
+
+# Create Date column
+data$Date <- as.Date(substr(data$timestamp, 1, 10))
+
+names(data)
+nrow(data)
+```
+
+# 2. Structure of Dataset
+
+```{r}
+str(data)
+```
+
+# 3. Variables in Dataset
+
+```{r}
+names(data)
+```
+
+# 4. Top 15 Rows
+
+```{r}
+head(data, 15)
+```
+
+# 5. User-Defined Function
+
+```{r}
+calc_15m_return <- function(open_price, close_price) {
+  ((close_price - open_price) / open_price) * 100
+}
+
+calc_15m_return(data$open[1], data$close[1])
+```
+
+# 6. Filter Data (2025 High Volume)
+
+```{r}
+filtered_data <- data[
+  format(data$Date, "%Y") == "2025" & 
+  data$volume > mean(data$volume, na.rm = TRUE),
+]
+
+head(filtered_data, 5)
+```
+
+# 7. Dependent & Independent Variables
+
+## The closing price is considered the dependent variable as it represents the outcome we aim to analyze and potentially predict for revenue optimization. Trading volume and opening price are treated as independent variables because they influence price movements and trading behavior.
+```{r}
+dep_df <- filtered_data[, c("Date", "close")]
+ind_df <- filtered_data[, c("Date", "volume", "open")]
+
+# Add ID for reshaping
+filtered_data$id <- 1:nrow(filtered_data)
+
+temp_wide <- filtered_data[, c("id", "Date", "close", "volume")]
+
+long_df <- reshape(
+  temp_wide,
+  direction = "long",
+  varying = list(c("close", "volume")),
+  v.names = "Value",
+  timevar = "Metric",
+  times = c("close", "volume"),
+  idvar = "id"
+)
+head(long_df, 5)
+# Merge dependent + independent
+new_df <- merge(dep_df, ind_df, by = "Date")
+
+head(new_df, 5)
+```
+
+## The reshaped dataset (long format) allows comparison of multiple variables (closing price and volume) within a single column structure, which is useful for further analysis and visualization.
+
+# 8. Remove Missing Values
+
+```{r}
+new_df <- na.omit(new_df)
+```
+
+# 9. Remove Duplicates
+
+```{r}
+new_df <- new_df[!duplicated(new_df), ]
+nrow(new_df)
+```
+
+# 10. Reorder Rows (Descending Closing Price)
+
+```{r}
+ordered_df <- new_df[order(-new_df$close), ]
+head(ordered_df, 5)
+```
+
+# 11. Rename Columns
+
+```{r}
+colnames(new_df)[colnames(new_df) == "close"] <- "Closing_Price"
+colnames(new_df)[colnames(new_df) == "volume"] <- "Trading_Volume"
+
+head(new_df, 3)
+```
+
+# 12. Add New Variables
+
+```{r}
+new_df$Trading_Volume_Doubled <- new_df$Trading_Volume * 2
+new_df$Total_Trade_Value <- new_df$Trading_Volume * new_df$Closing_Price
+
+head(new_df, 3)
+```
+
+# 13. Create Training Set
+
+```{r}
+set.seed(123)
+
+train_index <- sample(1:nrow(new_df), 0.7 * nrow(new_df))
+train_set <- new_df[train_index, ]
+
+nrow(train_set)
+```
+
+# 14. Summary Statistics
+
+```{r}
+summary(new_df)
+```
+
+##The summary statistics indicate that the closing price is relatively stable, with a moderate range, suggesting limited volatility within the observed period.
+
+# 15. Mean, Median, Mode, Range
+
+```{r}
+mean_price   <- mean(new_df$Closing_Price, na.rm = TRUE)
+median_price <- median(new_df$Closing_Price, na.rm = TRUE)
+
+get_mode <- function(v) {
+  uniqv <- unique(v)
+  uniqv[which.max(tabulate(match(v, uniqv)))]
+}
+
+mode_price <- get_mode(new_df$Closing_Price)
+
+range_price <- range(new_df$Closing_Price, na.rm = TRUE)
+
+stats_table <- data.frame(
+  Statistic = c("Mean", "Median", "Mode", "Range (Min to Max)"),
+  Value = c(
+    round(mean_price, 2),
+    round(median_price, 2),
+    round(mode_price, 2),
+    paste(round(range_price[1], 2), "to", round(range_price[2], 2))
+  )
+)
+
+knitr::kable(stats_table, caption = "Summary Statistics of Closing Price")
+```
+
+# 16. Scatter Plot
+
+```{r}
+plot(
+  new_df$Trading_Volume,
+  new_df$Closing_Price,
+  main = "Scatter Plot: Trading Volume vs Closing Price",
+  xlab = "Trading Volume",
+  ylab = "Closing Price",
+  pch = 19,
+  col = "steelblue"
+)
+```
+
+## The scatter plot shows a weak and widely dispersed relationship between trading volume and closing price. This visual pattern supports the low Pearson correlation value, indicating that trading volume does not strongly influence price movement.
+
+# 17. Bar Plot (Average Closing Price by Weekday)
+
+```{r}
+library(ggplot2)
+
+filtered_data$Weekday <- weekdays(filtered_data$Date)
+
+filtered_data$Weekday <- factor(
+  filtered_data$Weekday,
+  levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
+)
+
+avg_data <- aggregate(close ~ Weekday, data = filtered_data, mean)
+
+ggplot(avg_data, aes(x = Weekday, y = close)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(
+    title = "Average Closing Price by Weekday",
+    x = "Weekday",
+    y = "Average Closing Price"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    axis.text.x = element_text(angle = 0)
+  )
+```
+
+## The bar plot shows variation in average closing prices across weekdays. However, no consistent trend is observed, suggesting that weekday alone is not a strong factor influencing stock price movement.
+
+# 18. Pearson Correlation
+
+```{r}
+correlation <- cor(
+  new_df$Trading_Volume,
+  new_df$Closing_Price,
+  method = "pearson"
+)
+
+correlation
+```
+
+# Conclusion
+
+The Pearson correlation value (~0.086) indicates a very weak relationship between trading volume and closing price. This suggests that trading volume alone is not a strong predictor of price movement. 
+
+While high-volume periods highlight active trading windows, additional variables such as market trends or external factors would be required for accurate revenue optimization strategies.
+
+# GitHub Repository
+
+## https://github.com/YashikaDesul/Analytics-Programming-Visualization.git
